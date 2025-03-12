@@ -6,12 +6,9 @@
 
 #include "zephyr/device.h"
 #include "zephyr/drivers/gpio.h"
-#include <stdint.h>
 #include <zephyr/drivers/pinctrl.h>
 #include <zephyr/devicetree/gpio.h>
 #include <zephyr/drivers/gpio/gpio_cmsdk_ahb.h>
-#include <zephyr/drivers/gpio/gpio_utils.h>
-#include <zephyr/drivers/clock_control/arm_clock_control.h>
 
 /**
  * The ARM MPS2 Board has 4 GPIO controllers. These controllers
@@ -35,23 +32,6 @@ static const struct device *const gpio_ports[] = {
 	DEVICE_DT_GET_OR_NULL(DT_NODELABEL(gpio3)),
 };
 
-typedef void (*gpio_config_func_t)(const struct device *port);
-
-struct gpio_cmsdk_ahb_cfg {
-	/* gpio_driver_config needs to be first */
-	struct gpio_driver_config common;
-	volatile struct gpio_cmsdk_ahb *port;
-	gpio_config_func_t gpio_config_func;
-	/* GPIO Clock control in Active State */
-	struct arm_clock_control_t gpio_cc_as;
-	/* GPIO Clock control in Sleep State */
-	struct arm_clock_control_t gpio_cc_ss;
-	/* GPIO Clock control in Deep Sleep State */
-	struct arm_clock_control_t gpio_cc_dss;
-
-	const struct pinctrl_dev_config *pctrl;
-};
-
 static int pinctrl_configure_pin(const pinctrl_soc_pin_t *pin)
 {
 	uint32_t flags = pin->input_enable ? GPIO_INPUT : GPIO_OUTPUT;
@@ -59,33 +39,7 @@ static int pinctrl_configure_pin(const pinctrl_soc_pin_t *pin)
 	/* Each gpio has 16 pins, so divide by 16 to get specific gpio*/
 	const struct device *gpio_dev = gpio_ports[pin->pin_num >> 4];
 
-	/* mod 16 gets pin number, then BIT macro converts to bit mask */
-	uint32_t pin_mask = BIT(pin->pin_num % 16);
-
-	if (gpio_dev == NULL) {
-		return -EINVAL;
-	}
-	const struct gpio_cmsdk_ahb_cfg *const cfg = gpio_dev->config;
-
-	if (((flags & GPIO_INPUT) == 0) && ((flags & GPIO_OUTPUT) == 0)) {
-		return -ENOTSUP;
-	}
-
-	/*
-	 * Setup the pin direction
-	 * Output Enable:
-	 * 0 - Input
-	 * 1 - Output
-	 */
-	if ((flags & GPIO_OUTPUT) != 0) {
-		cfg->port->outenableset = pin_mask;
-	} else {
-		cfg->port->outenableclr = pin_mask;
-	}
-
-	cfg->port->altfuncclr = pin_mask;
-
-	return 0;
+	return cmsdk_ahb_gpio_config(gpio_dev, pin->pin_num % 16, flags);
 }
 
 int pinctrl_configure_pins(const pinctrl_soc_pin_t *pins, uint8_t pin_cnt, uintptr_t reg)
