@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 2016 Linaro Limited.
- * Copyright 2025 Arm Limited and/or its affiliates <open-source-office@arm.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -17,9 +16,6 @@
 #include <zephyr/drivers/clock_control/arm_clock_control.h>
 #include <zephyr/drivers/gpio/gpio_cmsdk_ahb.h>
 #include <zephyr/irq.h>
-#ifdef CONFIG_PINCTRL
-#include <zephyr/drivers/pinctrl.h>
-#endif /* CONFIG_PINCTRL */
 
 #include <zephyr/drivers/gpio/gpio_utils.h>
 
@@ -40,9 +36,6 @@ struct gpio_cmsdk_ahb_cfg {
 	struct arm_clock_control_t gpio_cc_ss;
 	/* GPIO Clock control in Deep Sleep State */
 	struct arm_clock_control_t gpio_cc_dss;
-#ifdef CONFIG_PINCTRL
-	const struct pinctrl_dev_config *pctrl;
-#endif /* CONFIG_PINCTRL */
 };
 
 struct gpio_cmsdk_ahb_dev_data {
@@ -243,17 +236,6 @@ static int gpio_cmsdk_ahb_init(const struct device *dev)
 {
 	const struct gpio_cmsdk_ahb_cfg * const cfg = dev->config;
 
-#ifdef CONFIG_PINCTRL
-	int ret = pinctrl_apply_state(cfg->pctrl, PINCTRL_STATE_DEFAULT);
-
-	/* some pins are not available externally so,
-	 * ignore if there is no entry for them
-	 */
-	if (ret != -ENOENT) {
-		return ret;
-	}
-#endif /* CONFIG_PINCTRL */
-
 #ifdef CONFIG_CLOCK_CONTROL
 	/* Enable clock for subsystem */
 	const struct device *const clk = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(0));
@@ -275,8 +257,8 @@ static int gpio_cmsdk_ahb_init(const struct device *dev)
 }
 
 #define CMSDK_AHB_GPIO_DEVICE(n)						\
-	IF_ENABLED(CONFIG_PINCTRL, (PINCTRL_DT_INST_DEFINE(n);))		\
-	static void gpio_cmsdk_port_##n##_config_func(const struct device *dev);\
+	static void gpio_cmsdk_port_##n##_config_func(const struct device *dev); \
+										\
 	static const struct gpio_cmsdk_ahb_cfg gpio_cmsdk_port_##n##_config = {	\
 		.common = {							\
 			.port_pin_mask = GPIO_PORT_PIN_MASK_FROM_DT_INST(n),	\
@@ -289,8 +271,6 @@ static int gpio_cmsdk_ahb_init(const struct device *dev)
 			       .device = DT_INST_REG_ADDR(n),},			\
 		.gpio_cc_dss = {.bus = CMSDK_AHB, .state = SOC_DEEPSLEEP,	\
 				.device = DT_INST_REG_ADDR(n),},		\
-		IF_ENABLED(CONFIG_PINCTRL, (					\
-			.pctrl = PINCTRL_DT_INST_DEV_CONFIG_GET(n),))		\
 	};									\
 										\
 	static struct gpio_cmsdk_ahb_dev_data gpio_cmsdk_port_##n##_data;	\
@@ -299,8 +279,8 @@ static int gpio_cmsdk_ahb_init(const struct device *dev)
 			    gpio_cmsdk_ahb_init,				\
 			    NULL,						\
 			    &gpio_cmsdk_port_##n##_data,			\
-			    &gpio_cmsdk_port_##n##_config,			\
-			    PRE_KERNEL_1, CONFIG_GPIO_INIT_PRIORITY,		\
+			    &gpio_cmsdk_port_## n ##_config,			\
+			    PRE_KERNEL_1, CONFIG_GPIO_INIT_PRIORITY,	\
 			    &gpio_cmsdk_ahb_drv_api_funcs);			\
 										\
 	static void gpio_cmsdk_port_##n##_config_func(const struct device *dev)	\
